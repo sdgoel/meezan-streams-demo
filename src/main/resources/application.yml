@@ -16,11 +16,22 @@ spring:
 app:
   redis:
     streams:
-      names: ${REDIS_STREAMS:events:orders,events:payments}
+      names: ${REDIS_STREAMS:t24_customer_events,t24_currency_events,t24_cusrtomer_events}
       group: ${REDIS_STREAM_GROUP:demo-service}
       consumer: ${REDIS_STREAM_CONSUMER:${HOSTNAME:local}-${random.uuid}}
       poll-timeout: ${REDIS_STREAM_POLL_TIMEOUT:2s}
       delete-after-ack: ${REDIS_STREAM_DELETE_AFTER_ACK:true}
+    stream-projections:
+      definitions:
+        - stream: ${T24_CUSTOMER_STREAM:t24_customer_events}
+          key-prefix: ${T24_CUSTOMER_HASH_PREFIX:t24_customer}
+          c-values: ${T24_CUSTOMER_C_VALUES:c176,c178}
+        - stream: ${T24_CURRENCY_STREAM:t24_currency_events}
+          key-prefix: ${T24_CURRENCY_HASH_PREFIX:t24_currency}
+          c-values: ${T24_CURRENCY_C_VALUES:c1,c2}
+        - stream: ${T24_CUSRTOMER_STREAM:t24_cusrtomer_events}
+          key-prefix: ${T24_CUSRTOMER_HASH_PREFIX:t24_cusrtomer}
+          c-values: ${T24_CUSRTOMER_C_VALUES:c176,c178}
 
 management:
   endpoints:

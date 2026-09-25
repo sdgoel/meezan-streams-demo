@@ -41,9 +41,12 @@ export REDIS_PORT=12000
 export REDIS_USERNAME=default
 export REDIS_PASSWORD='replace-me'
 export REDIS_SSL=true
-export REDIS_STREAMS=t24_account_events:PKR143010001,t24_currency_events:PKR,t24_customer_raw_events:100011
-export REDIS_STREAM_GROUP=order-service
-export REDIS_STREAM_CONSUMER=order-service-1
+export REDIS_STREAMS=t24_customer_events,t24_currency_events,t24_cusrtomer_events
+export REDIS_STREAM_GROUP=t24-projector
+export REDIS_STREAM_CONSUMER=t24-projector-1
+export T24_CUSTOMER_C_VALUES=c176,c178
+export T24_CURRENCY_C_VALUES=c1,c2
+export T24_CUSRTOMER_C_VALUES=c176,c178
 mvn spring-boot:run
 ```
 
@@ -60,17 +63,29 @@ The consumer name must be unique per running application instance. A unique valu
 
 `XDEL` removes the record globally, including for other groups. Set `REDIS_STREAM_DELETE_AFTER_ACK=false` when more than one consumer group needs the same stream or when the stream is an audit log. Configure Redis stream trimming/retention separately for that case.
 
-Three example processors are included:
+The three streams use independently configurable XML-to-Hash projections:
 
-| Stream-key family | Processor |
-|---|---|
-| `t24_account_events:*` | `AccountEventProcessor` |
-| `t24_currency_events:*` | `CurrencyEventProcessor` |
-| `t24_customer_raw_events:*` | `CustomerRawEventProcessor` |
+| Stream | Selected fields | Output key example |
+|---|---|---|
+| `t24_customer_events` | `T24_CUSTOMER_C_VALUES` | `t24_customer_100011_c176_c178` |
+| `t24_currency_events` | `T24_CURRENCY_C_VALUES` | `t24_currency_USD_c1_c2` |
+| `t24_cusrtomer_events` | `T24_CUSRTOMER_C_VALUES` | `t24_cusrtomer_100011_c176_c178` |
 
-The suffix (account id, currency, or row id) is extracted from the actual stream key. Put the business logic for each family in its processor's `process(...)` method. To add another family, create a Spring component implementing `StreamSpecificProcessor`. Exactly one processor may match a stream. An unmatched stream uses the logging fallback. Processing should be idempotent because Redis Streams provide at-least-once delivery.
+`t24_cusrtomer_events` is intentionally configured exactly as supplied; rename `T24_CUSRTOMER_STREAM` and its hash prefix if that spelling is accidental.
 
-Redis does not support wildcard subscriptions such as `t24_customer_raw_events:*` with `XREADGROUP`. Every concrete key still has to be present in `REDIS_STREAMS`; the wildcard is used only by the Java router after a message has been received.
+For each message, `XmlHashStreamProcessor` reads `doc`, validates its `<row id='...'>`, extracts the configured XML elements, and writes one Redis Hash. A normal single element is stored as a plain string. Repeated elements such as `c178 m='12'` and `c178 m='13'` are stored in the `c178` hash field as a JSON array so neither their `m` attributes nor values are lost. A configured element that is absent from the XML is stored as an empty string.
+
+Example output:
+
+```text
+key: t24_customer_100011_c176_c178
+
+row_id = 100011
+c176   = ""
+c178   = [{"m":"12","value":"ELAHI BUKHSH"},{"m":"13","value":"UMER JAHAN"}]
+```
+
+The Hash write is idempotent: redelivery writes the same key and fields. Only after the Hash write succeeds does the common handler acknowledge and delete the Stream entry. Invalid XML, a missing `doc`, or conflicting `row_id` leaves the message pending and logs the error. XML DTDs and external entities are disabled.
 
 ## API examples
 
@@ -168,11 +183,14 @@ curl -i -X DELETE 'http://localhost:8080/api/v1/json/profile/42'
 | `REDIS_SSL` | `false` | Enable TLS for Redis Enterprise |
 | `REDIS_CONNECT_TIMEOUT` | `2s` | TCP connection timeout |
 | `REDIS_COMMAND_TIMEOUT` | `5s` | Command timeout |
-| `REDIS_STREAMS` | `events:orders,events:payments` | Comma-separated streams |
+| `REDIS_STREAMS` | the three T24 streams above | Comma-separated streams |
 | `REDIS_STREAM_GROUP` | `demo-service` | Consumer group |
 | `REDIS_STREAM_CONSUMER` | generated | Unique instance consumer name |
 | `REDIS_STREAM_POLL_TIMEOUT` | `2s` | Blocking stream read timeout |
 | `REDIS_STREAM_DELETE_AFTER_ACK` | `true` | Delete records after successful processing |
+| `T24_CUSTOMER_C_VALUES` | `c176,c178` | XML elements projected for `t24_customer_events` |
+| `T24_CURRENCY_C_VALUES` | `c1,c2` | XML elements projected for `t24_currency_events` |
+| `T24_CUSRTOMER_C_VALUES` | `c176,c178` | XML elements projected for `t24_cusrtomer_events` |
 
 ## Test and package
 

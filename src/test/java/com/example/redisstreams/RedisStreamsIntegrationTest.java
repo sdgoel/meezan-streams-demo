@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(properties = {
-        "app.redis.streams.names=events:test-one,events:test-two",
+        "app.redis.streams.names=events:test-one,events:test-two,t24_customer_events",
         "app.redis.streams.group=test-group",
         "app.redis.streams.consumer=test-consumer",
         "app.redis.streams.poll-timeout=100ms",
@@ -88,6 +88,24 @@ class RedisStreamsIntegrationTest {
 
         awaitStreamLength("events:test-one", 0);
         awaitStreamLength("events:test-two", 0);
+    }
+
+    @Test
+    void projectsConfiguredXmlCValuesToAHashBeforeDeletingTheMessage() throws Exception {
+        String document = "<row id='100011'><c178 m='12'>ELAHI BUKHSH</c178>"
+                + "<c178 m='13'>UMER JAHAN</c178></row>";
+        streams.publish("t24_customer_events", Map.of(
+                "row_id", "100011",
+                "doc", document,
+                "op_code", "r"));
+
+        awaitStreamLength("t24_customer_events", 0);
+
+        String key = "t24_customer_100011_c176_c178";
+        assertThat(redis.opsForHash().get(key, "row_id")).isEqualTo("100011");
+        assertThat(redis.opsForHash().get(key, "c176")).isEqualTo("");
+        assertThat(redis.opsForHash().get(key, "c178").toString())
+                .contains("ELAHI BUKHSH", "UMER JAHAN", "\"m\":\"12\"");
     }
 
     private void awaitStreamLength(String stream, long expected) throws InterruptedException {
