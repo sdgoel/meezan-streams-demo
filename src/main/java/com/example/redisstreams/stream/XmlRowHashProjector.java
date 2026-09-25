@@ -1,6 +1,5 @@
 package com.example.redisstreams.stream;
 
-import com.example.redisstreams.config.StreamProjectionProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -33,7 +32,8 @@ public class XmlRowHashProjector {
 
     public ProjectionResult project(String xml,
                                     String messageRowId,
-                                    StreamProjectionProperties.Definition definition) {
+                                    String keyPrefix,
+                                    List<String> cValues) {
         Document document = parse(xml);
         Element row = document.getDocumentElement();
         if (!"row".equals(row.getTagName())) {
@@ -50,11 +50,11 @@ public class XmlRowHashProjector {
 
         Map<String, String> hash = new LinkedHashMap<>();
         hash.put("row_id", rowId);
-        for (String cValue : definition.cValues()) {
+        for (String cValue : cValues) {
             hash.put(cValue, extract(row, cValue));
         }
 
-        String key = definition.keyPrefix() + "_" + rowId + "_" + String.join("_", definition.cValues());
+        String key = keyPrefix + "_" + rowId + "_" + String.join("_", cValues);
         redis.opsForHash().putAll(key, hash);
         return new ProjectionResult(key, Map.copyOf(hash));
     }

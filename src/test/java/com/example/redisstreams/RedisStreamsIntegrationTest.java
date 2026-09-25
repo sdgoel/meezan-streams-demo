@@ -97,13 +97,14 @@ class RedisStreamsIntegrationTest {
         streams.publish("t24_customer_events", Map.of(
                 "row_id", "100011",
                 "doc", document,
+                "c_values", "c178",
                 "op_code", "r"));
 
         awaitStreamLength("t24_customer_events", 0);
 
-        String key = "t24_customer_100011_c176_c178";
+        String key = "t24_customer_100011_c178";
         assertThat(redis.opsForHash().get(key, "row_id")).isEqualTo("100011");
-        assertThat(redis.opsForHash().get(key, "c176")).isEqualTo("");
+        assertThat(redis.opsForHash().hasKey(key, "c176")).isFalse();
         assertThat(redis.opsForHash().get(key, "c178").toString())
                 .contains("ELAHI BUKHSH", "UMER JAHAN", "\"m\":\"12\"");
     }

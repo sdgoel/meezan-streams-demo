@@ -1,6 +1,5 @@
 package com.example.redisstreams.stream;
 
-import com.example.redisstreams.config.StreamProjectionProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.HashOperations;
@@ -26,10 +25,8 @@ class XmlRowHashProjectorTest {
         when(redis.opsForHash()).thenReturn(hashes);
         String xml = "<row id='100011'><c176>ACTIVE</c176>"
                 + "<c178 m='12'>ELAHI BUKHSH</c178><c178 m='13'>UMER JAHAN</c178></row>";
-        var definition = new StreamProjectionProperties.Definition(
-                "t24_customer_events", "t24_customer", List.of("c176", "c178"));
-
-        XmlRowHashProjector.ProjectionResult result = projector.project(xml, "100011", definition);
+        XmlRowHashProjector.ProjectionResult result = projector.project(
+                xml, "100011", "t24_customer", List.of("c176", "c178"));
 
         assertThat(result.key()).isEqualTo("t24_customer_100011_c176_c178");
         assertThat(result.fields()).containsEntry("row_id", "100011").containsEntry("c176", "ACTIVE");
@@ -41,25 +38,21 @@ class XmlRowHashProjectorTest {
     @Test
     void storesEmptyStringWhenAConfiguredCValueIsAbsent() {
         when(redis.opsForHash()).thenReturn(hashes);
-        var definition = new StreamProjectionProperties.Definition(
-                "t24_customer_events", "t24_customer", List.of("c176", "c178"));
-
         XmlRowHashProjector.ProjectionResult result = projector.project(
-                "<row id='100011'><c178>present</c178></row>", null, definition);
+                "<row id='100011'><c178>present</c178></row>", null,
+                "t24_customer", List.of("c176", "c178"));
 
         assertThat(result.fields()).containsEntry("c176", "").containsEntry("c178", "present");
     }
 
     @Test
     void rejectsExternalEntitiesAndMismatchedRowIds() {
-        var definition = new StreamProjectionProperties.Definition(
-                "t24_customer_events", "t24_customer", List.of("c178"));
-
         assertThatThrownBy(() -> projector.project(
                 "<!DOCTYPE row [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]><row id='1'><c178>&xxe;</c178></row>",
-                null, definition)).isInstanceOf(IllegalArgumentException.class);
+                null, "t24_customer", List.of("c178"))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> projector.project(
-                "<row id='100011'><c178>value</c178></row>", "different", definition))
+                "<row id='100011'><c178>value</c178></row>", "different",
+                "t24_customer", List.of("c178")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("does not match");
     }

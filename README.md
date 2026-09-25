@@ -44,9 +44,6 @@ export REDIS_SSL=true
 export REDIS_STREAMS=t24_customer_events,t24_currency_events,t24_cusrtomer_events
 export REDIS_STREAM_GROUP=t24-projector
 export REDIS_STREAM_CONSUMER=t24-projector-1
-export T24_CUSTOMER_C_VALUES=c176,c178
-export T24_CURRENCY_C_VALUES=c1,c2
-export T24_CUSRTOMER_C_VALUES=c176,c178
 mvn spring-boot:run
 ```
 
@@ -65,13 +62,31 @@ The consumer name must be unique per running application instance. A unique valu
 
 The three streams use independently configurable XML-to-Hash projections:
 
-| Stream | Selected fields | Output key example |
+| Stream | Code-level defaults | Output key example |
 |---|---|---|
-| `t24_customer_events` | `T24_CUSTOMER_C_VALUES` | `t24_customer_100011_c176_c178` |
-| `t24_currency_events` | `T24_CURRENCY_C_VALUES` | `t24_currency_USD_c1_c2` |
-| `t24_cusrtomer_events` | `T24_CUSRTOMER_C_VALUES` | `t24_cusrtomer_100011_c176_c178` |
+| `t24_customer_events` | `c176,c178` | `t24_customer_100011_c176_c178` |
+| `t24_currency_events` | `c1,c2` | `t24_currency_USD_c1_c2` |
+| `t24_cusrtomer_events` | `c176,c178` | `t24_cusrtomer_100011_c176_c178` |
 
-`t24_cusrtomer_events` is intentionally configured exactly as supplied; rename `T24_CUSRTOMER_STREAM` and its hash prefix if that spelling is accidental.
+The defaults are ordinary Java lists in `T24StreamProjectionCatalog`. Change a stream from one field to several fields with `List.of(...)`:
+
+```java
+"t24_customer_events", new Definition(
+        "t24_customer_events",
+        "t24_customer",
+        List.of("c176", "c178", "c181"))
+```
+
+The producer can override that default for one message by adding the `c_values` Stream field. It accepts one or many comma-separated values:
+
+```text
+c_values=c176
+c_values=c176,c178,c181
+```
+
+For example, publishing the same XML with `c_values=c178` creates `t24_customer_100011_c178` and stores only `row_id` and `c178`. Requests are normalized, duplicate fields are removed, and between one and 100 names matching `c` followed by digits are accepted.
+
+`t24_cusrtomer_events` is intentionally configured exactly as supplied; change its Java catalog entry if that spelling is accidental.
 
 For each message, `XmlHashStreamProcessor` reads `doc`, validates its `<row id='...'>`, extracts the configured XML elements, and writes one Redis Hash. A normal single element is stored as a plain string. Repeated elements such as `c178 m='12'` and `c178 m='13'` are stored in the `c178` hash field as a JSON array so neither their `m` attributes nor values are lost. A configured element that is absent from the XML is stored as an empty string.
 
@@ -89,16 +104,12 @@ The Hash write is idempotent: redelivery writes the same key and fields. Only af
 
 ## API examples
 
-### Publish to either configured stream
+### Publish XML and request selected c-values
 
 ```bash
-curl -i -X POST http://localhost:8080/api/v1/streams/events:orders/messages \
+curl -i -X POST http://localhost:8080/api/v1/streams/t24_customer_events/messages \
   -H 'Content-Type: application/json' \
-  -d '{"fields":{"event":"order-created","orderId":"1001"}}'
-
-curl -i -X POST http://localhost:8080/api/v1/streams/events:payments/messages \
-  -H 'Content-Type: application/json' \
-  -d '{"fields":{"event":"payment-received","orderId":"1001"}}'
+  -d '{"fields":{"row_id":"100011","c_values":"c176,c178","doc":"<row id=\"100011\"><c176>ACTIVE</c176><c178 m=\"12\">ELAHI BUKHSH</c178></row>"}}'
 ```
 
 ### Redis String CRUD and counters
@@ -188,9 +199,6 @@ curl -i -X DELETE 'http://localhost:8080/api/v1/json/profile/42'
 | `REDIS_STREAM_CONSUMER` | generated | Unique instance consumer name |
 | `REDIS_STREAM_POLL_TIMEOUT` | `2s` | Blocking stream read timeout |
 | `REDIS_STREAM_DELETE_AFTER_ACK` | `true` | Delete records after successful processing |
-| `T24_CUSTOMER_C_VALUES` | `c176,c178` | XML elements projected for `t24_customer_events` |
-| `T24_CURRENCY_C_VALUES` | `c1,c2` | XML elements projected for `t24_currency_events` |
-| `T24_CUSRTOMER_C_VALUES` | `c176,c178` | XML elements projected for `t24_cusrtomer_events` |
 
 ## Test and package
 
