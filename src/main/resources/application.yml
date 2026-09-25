@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: redis-enterprise-streams
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:default}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_COMMAND_TIMEOUT:5s}
+      client-type: lettuce
+
+app:
+  redis:
+    streams:
+      names: ${REDIS_STREAMS:events:orders,events:payments}
+      group: ${REDIS_STREAM_GROUP:demo-service}
+      consumer: ${REDIS_STREAM_CONSUMER:${HOSTNAME:local}-${random.uuid}}
+      poll-timeout: ${REDIS_STREAM_POLL_TIMEOUT:2s}
+      delete-after-ack: ${REDIS_STREAM_DELETE_AFTER_ACK:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+server:
+  shutdown: graceful
