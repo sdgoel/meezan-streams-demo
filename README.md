@@ -41,7 +41,7 @@ export REDIS_PORT=12000
 export REDIS_USERNAME=default
 export REDIS_PASSWORD='replace-me'
 export REDIS_SSL=true
-export REDIS_STREAMS=events:orders,events:payments,events:shipments
+export REDIS_STREAMS=t24_account_events:PKR143010001,t24_currency_events:PKR,t24_customer_raw_events:100011
 export REDIS_STREAM_GROUP=order-service
 export REDIS_STREAM_CONSUMER=order-service-1
 mvn spring-boot:run
@@ -52,14 +52,25 @@ The consumer name must be unique per running application instance. A unique valu
 ### Stream delivery semantics
 
 1. Redis delivers a record to the configured consumer group.
-2. `StreamMessageProcessor.process(...)` runs.
-3. On success, the record is acknowledged (`XACK`).
-4. If `REDIS_STREAM_DELETE_AFTER_ACK=true`, it is then removed (`XDEL`).
-5. On processing failure it is not acknowledged or deleted, and remains in the group's pending-entry list.
+2. `StreamRecordHandler` passes the record to `StreamProcessorRouter`.
+3. The router selects one `StreamSpecificProcessor` from the concrete stream key.
+4. On success, the record is acknowledged (`XACK`).
+5. If `REDIS_STREAM_DELETE_AFTER_ACK=true`, it is then removed (`XDEL`).
+6. On processing failure it is not acknowledged or deleted, and remains in the group's pending-entry list.
 
 `XDEL` removes the record globally, including for other groups. Set `REDIS_STREAM_DELETE_AFTER_ACK=false` when more than one consumer group needs the same stream or when the stream is an audit log. Configure Redis stream trimming/retention separately for that case.
 
-Replace `LoggingStreamMessageProcessor` with an application bean implementing `StreamMessageProcessor` to add business logic. Processing should be idempotent because Redis Streams provide at-least-once delivery.
+Three example processors are included:
+
+| Stream-key family | Processor |
+|---|---|
+| `t24_account_events:*` | `AccountEventProcessor` |
+| `t24_currency_events:*` | `CurrencyEventProcessor` |
+| `t24_customer_raw_events:*` | `CustomerRawEventProcessor` |
+
+The suffix (account id, currency, or row id) is extracted from the actual stream key. Put the business logic for each family in its processor's `process(...)` method. To add another family, create a Spring component implementing `StreamSpecificProcessor`. Exactly one processor may match a stream. An unmatched stream uses the logging fallback. Processing should be idempotent because Redis Streams provide at-least-once delivery.
+
+Redis does not support wildcard subscriptions such as `t24_customer_raw_events:*` with `XREADGROUP`. Every concrete key still has to be present in `REDIS_STREAMS`; the wildcard is used only by the Java router after a message has been received.
 
 ## API examples
 
