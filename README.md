@@ -16,6 +16,37 @@ A Java 21 / Spring Boot service demonstrating:
 
 ## Run locally
 
+### VS Code
+
+Install the **Extension Pack for Java**, **Spring Boot Extension Pack**, and
+**Docker** extensions. Open this repository in VS Code, then use its integrated
+terminal:
+
+```bash
+java -version       # Java 21
+mvn -version        # Maven 3.9+
+docker compose up -d redis
+mvn spring-boot:run
+```
+
+Alternatively, open
+`src/main/java/com/example/redisstreams/RedisStreamsApplication.java` and use
+the **Run** action above its `main` method after starting Redis.
+
+Verify the service from a second terminal:
+
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+Stop Spring Boot with `Ctrl+C`, then stop the local Redis container with:
+
+```bash
+docker compose down
+```
+
+### Other local options
+
 With Docker only:
 
 ```bash
